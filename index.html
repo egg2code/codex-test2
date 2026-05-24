@@ -1,13 +1,313 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hello World</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>反射神経トレーニング</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #111827;
+      --card: #1f2937;
+      --text: #f9fafb;
+      --accent: #22d3ee;
+      --danger: #fb7185;
+      --ok: #34d399;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+      background: radial-gradient(circle at top, #1e293b, var(--bg) 55%);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+
+    .app {
+      width: min(920px, 100%);
+      display: grid;
+      gap: 14px;
+    }
+
+    .panel {
+      background: color-mix(in srgb, var(--card) 88%, black 12%);
+      border: 1px solid color-mix(in srgb, white 12%, transparent);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+    }
+
+    .stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stat-group {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), #3b82f6);
+      color: white;
+      font-weight: 700;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: transform .05s ease;
+    }
+
+    button:active { transform: translateY(1px) scale(.99); }
+
+    .field {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      min-height: 340px;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      background:
+        linear-gradient(transparent 97%, rgba(255,255,255,.06) 97%),
+        linear-gradient(90deg, transparent 97%, rgba(255,255,255,.06) 97%),
+        #0b1220;
+      background-size: 40px 40px, 40px 40px, cover;
+      border-radius: 12px;
+      border: 1px solid color-mix(in srgb, white 12%, transparent);
+    }
+
+    .mark {
+      position: absolute;
+      width: clamp(44px, 8vw, 72px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: clamp(1rem, 2.6vw, 1.55rem);
+      font-weight: 900;
+      color: white;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      outline: none;
+      border: 3px solid rgba(255, 255, 255, .9);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+      animation: pop .11s ease-out;
+    }
+
+    .mark.good { background: radial-gradient(circle at 30% 25%, #67e8f9, #06b6d4 55%, #0891b2); }
+    .mark.bad { background: radial-gradient(circle at 30% 25%, #fda4af, #fb7185 55%, #e11d48); }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: rgba(0, 0, 0, .5);
+      padding: 16px;
+    }
+
+    .overlay h1 { margin: 0 0 10px; font-size: clamp(1.4rem, 3vw, 2rem); }
+    .overlay p { margin: 0; opacity: .9; }
+
+    .tips {
+      font-size: .95rem;
+      opacity: .9;
+      line-height: 1.6;
+    }
+
+    @keyframes pop {
+      from { transform: translate(-50%, -50%) scale(.7); opacity: .3; }
+      to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+  </style>
 </head>
 <body>
-  Hello World!!<BR>
-  This HTML was updated via instructions from an iPhone using Codex.
-  <BR>However, each individual change requires creating a separate cloud task, because after making changes we cannot pull the latest repository state from GitHub.
+  <main class="app">
+    <section class="panel stats">
+      <div class="stat-group">
+        <span>スコア: <strong id="score">0</strong></span>
+        <span>残り時間: <strong id="time">30.0</strong>s</span>
+        <span>コンボ: <strong id="combo">0</strong></span>
+        <span>最高: <strong id="best">0</strong></span>
+      </div>
+      <button id="startBtn" type="button">スタート</button>
+    </section>
+
+    <section class="panel">
+      <div id="field" class="field" aria-label="ゲームフィールド">
+        <div class="overlay" id="overlay">
+          <div>
+            <h1>反射神経トレーニング</h1>
+            <p>出現したマークをタッチ（クリック）で消そう！青は+1点、赤は-2点。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel tips">
+      30秒の間にできるだけ多くタップしてスコアを伸ばします。<br>
+      連続成功でコンボが伸び、マークの出現が少し速くなります。
+    </section>
+  </main>
+
+  <script>
+    const field = document.getElementById('field');
+    const overlay = document.getElementById('overlay');
+    const startBtn = document.getElementById('startBtn');
+    const scoreEl = document.getElementById('score');
+    const timeEl = document.getElementById('time');
+    const comboEl = document.getElementById('combo');
+    const bestEl = document.getElementById('best');
+
+    const GAME_SECONDS = 30;
+    const MARK_LIFE_MS = 1200;
+    let score = 0;
+    let combo = 0;
+    let best = Number(localStorage.getItem('reflex-best') || 0);
+    let remainingMs = GAME_SECONDS * 1000;
+    let running = false;
+    let lastTick = 0;
+    let spawnTimer;
+    let frameId;
+
+    bestEl.textContent = String(best);
+
+    function clearMarks() {
+      field.querySelectorAll('.mark').forEach((el) => el.remove());
+    }
+
+    function updateUI() {
+      scoreEl.textContent = String(score);
+      comboEl.textContent = String(combo);
+      timeEl.textContent = (remainingMs / 1000).toFixed(1);
+      bestEl.textContent = String(best);
+    }
+
+    function finishGame() {
+      running = false;
+      clearTimeout(spawnTimer);
+      cancelAnimationFrame(frameId);
+      clearMarks();
+
+      if (score > best) {
+        best = score;
+        localStorage.setItem('reflex-best', String(best));
+      }
+      updateUI();
+
+      overlay.innerHTML = `
+        <div>
+          <h1>終了！スコア: ${score}</h1>
+          <p>もう一度挑戦して反射神経を鍛えよう。</p>
+        </div>
+      `;
+      overlay.hidden = false;
+      startBtn.textContent = 'もう一回';
+    }
+
+    function scheduleSpawn() {
+      if (!running) return;
+      const interval = Math.max(280, 900 - combo * 18);
+      spawnTimer = setTimeout(() => {
+        spawnMark();
+        scheduleSpawn();
+      }, interval);
+    }
+
+    function removeMark(mark, hit) {
+      if (!mark.isConnected) return;
+      const good = mark.classList.contains('good');
+      mark.remove();
+
+      if (hit) {
+        if (good) {
+          score += 1;
+          combo += 1;
+        } else {
+          score = Math.max(0, score - 2);
+          combo = 0;
+        }
+      } else if (good) {
+        combo = 0;
+      }
+
+      updateUI();
+    }
+
+    function spawnMark() {
+      if (!running) return;
+      const rect = field.getBoundingClientRect();
+      const mark = document.createElement('button');
+      const isGood = Math.random() < 0.83;
+      mark.type = 'button';
+      mark.className = `mark ${isGood ? 'good' : 'bad'}`;
+      mark.textContent = isGood ? '✓' : '!';
+
+      const x = 8 + Math.random() * 84;
+      const y = 10 + Math.random() * 80;
+      mark.style.left = `${x}%`;
+      mark.style.top = `${y}%`;
+
+      mark.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        removeMark(mark, true);
+      }, { passive: false });
+
+      field.append(mark);
+
+      setTimeout(() => removeMark(mark, false), MARK_LIFE_MS + Math.random() * 350);
+    }
+
+    function tick(now) {
+      if (!running) return;
+      if (!lastTick) lastTick = now;
+      const dt = now - lastTick;
+      lastTick = now;
+      remainingMs = Math.max(0, remainingMs - dt);
+      updateUI();
+
+      if (remainingMs <= 0) {
+        finishGame();
+      } else {
+        frameId = requestAnimationFrame(tick);
+      }
+    }
+
+    function startGame() {
+      running = true;
+      score = 0;
+      combo = 0;
+      remainingMs = GAME_SECONDS * 1000;
+      lastTick = 0;
+      clearMarks();
+      overlay.hidden = true;
+      startBtn.textContent = 'プレイ中…';
+      updateUI();
+
+      spawnMark();
+      scheduleSpawn();
+      frameId = requestAnimationFrame(tick);
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (running) return;
+      startGame();
+    });
+
+    updateUI();
+  </script>
 </body>
 </html>
